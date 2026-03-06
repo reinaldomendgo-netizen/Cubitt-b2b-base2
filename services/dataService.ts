@@ -57,32 +57,32 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
     // 1. Consultar tabla 'clientes' para obtener el tipo de precio
     let priceKey: string | undefined;
     
+    // Normalizamos el nombre de la empresa para la búsqueda
+    // Usamos ilike para búsqueda insensible a mayúsculas/minúsculas
     const { data: clientData, error: clientError } = await supabase
       .from('clientes')
-      .select('tipo_precio')
-      .ilike('empresa', companyName)
+      .select('Tipo_precio')
+      .ilike('Empresa', companyName)
       .maybeSingle();
 
     if (clientError) {
       console.error('Error fetching client:', clientError);
     }
 
-    if (clientData && clientData.tipo_precio) {
-      priceKey = clientData.tipo_precio;
+    if (clientData && clientData.Tipo_precio) {
+      priceKey = clientData.Tipo_precio;
       console.log(`Cliente encontrado: ${companyName}, Tipo de Precio: ${priceKey}`);
     } else {
       console.log(`Cliente no encontrado o sin tipo de precio: ${companyName}. Usando precio base.`);
     }
 
     // 2. Consultar tabla 'productos'
-    // Columnas requeridas: Title, Variant SKU, Variant Price, Variant Inventory Qty, Variant Image, Image Src, Image Alt Text, Variant Barcode, T20, PAA, PAB, PAC, PAD
     console.log(`Cargando productos desde tabla: "productos"...`);
     
-    // Usamos select('*') para evitar errores si falta alguna columna específica o si hay diferencias en mayúsculas/minúsculas
     const { data, error } = await supabase
       .from('productos')
       .select('*')
-      .range(0, 9999);
+      .range(0, 10000); // Rango amplio como solicitado
 
     if (error) {
       console.error('Error al cargar productos:', error);
@@ -96,9 +96,9 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
 
     console.log(`Éxito: ${data.length} filas cargadas desde "productos".`);
 
-    // 3. Procesar filas como productos individuales
-    const products = processRowsAsIndividualProducts(data as DataRow[], priceKey);
-    console.log(`Procesados ${products.length} productos individuales.`);
+    // 3. Procesar filas agrupando por Handle
+    const products = processRowsGroupedByHandle(data as DataRow[], priceKey);
+    console.log(`Procesados ${products.length} productos agrupados.`);
 
     return products;
   } catch (error) {
@@ -107,7 +107,7 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
   }
 };
 
-const processRowsAsIndividualProducts = (rows: DataRow[], priceKey?: string): Product[] => {
+const processRowsGroupedByHandle = (rows: DataRow[], priceKey?: string): Product[] => {
   // Helper para obtener valores de forma insensible a mayúsculas/minúsculas
   const getValue = (row: DataRow, key: string) => {
     if (row[key] !== undefined) return row[key];
@@ -115,68 +115,102 @@ const processRowsAsIndividualProducts = (rows: DataRow[], priceKey?: string): Pr
     return foundKey ? row[foundKey] : undefined;
   };
 
-  return rows.map((row) => {
-    // 1. Identificadores
-    const title = getValue(row, 'Title') || 'Sin Título';
-    const sku = getValue(row, 'Variant SKU') || `SKU-${Math.random().toString(36).substr(2, 9)}`;
-    const handle = sku; // Usamos SKU como handle único ya que cada variante es un producto
+  // Helper para obtener el precio correcto
+  const getPrice = (row: DataRow, typePrice?: string): number => {
+    let priceVal: any;
 
-    // 2. Precios
-    // Lógica: Si existe priceKey (ej: T20) y tiene valor, usarlo. Si no, usar Variant Price.
-    let price = 0;
-    if (priceKey) {
-      const val = getValue(row, priceKey);
-      if (val !== undefined && val !== null && val !== '') {
-        const p = parseFloat(String(val).replace(/[^0-9.]/g, ''));
-        if (!isNaN(p)) price = p;
-      }
-    }
-    
-    if (price === 0) {
-      const val = getValue(row, 'Variant Price');
-      const p = parseFloat(String(val || '0').replace(/[^0-9.]/g, ''));
-      if (!isNaN(p)) price = p;
+    if (typePrice) {
+      // Intentar obtener el precio específico (T20, PAA, etc.)
+      // Buscamos la columna que coincida con el tipo de precio
+      priceVal = getValue(row, typePrice);
     }
 
-    // 3. Inventario
+    // Si no se encontró precio específico o es inválido, usar Variant Price
+    if (priceVal === undefined || priceVal === null || priceVal === '') {
+      priceVal = getValue(row, 'Variant Price');
+    }
+
+    // Limpiar y parsear el precio
+    const p = parseFloat(String(priceVal || '0').replace(/[^0-9.]/g, ''));
+    return isNaN(p) ? 0 : p;
+  };
+
+  // Agrupar filas por Handle
+  const grouped: { [handle: string]: DataRow[] } = {};
+  
+  rows.forEach(row => {
+    // Filtrar por inventario > 0
     const inventoryVal = getValue(row, 'Variant Inventory Qty');
     const inventory = parseInt(String(inventoryVal || '0'), 10) || 0;
 
-    // 4. Imagen
-    // Prioridad: Variant Image > Image Src
-    const image = getValue(row, 'Variant Image') || getValue(row, 'Image Src') || '';
+    if (inventory > 0) {
+      const handle = getValue(row, 'Handle');
+      if (handle) {
+        if (!grouped[handle]) {
+          grouped[handle] = [];
+        }
+        grouped[handle].push(row);
+      }
+    }
+  });
 
-    // 5. Otros datos
-    const barcode = getValue(row, 'Variant Barcode') || '';
-    const description = getValue(row, 'Image Alt Text') || ''; // Usamos Alt Text como descripción breve si no hay otra
+  // Convertir grupos a objetos Product
+  const products: Product[] = Object.keys(grouped).map(handle => {
+    const groupRows = grouped[handle];
+    const mainRow = groupRows[0]; // Usamos la primera fila para datos generales
 
-    // Crear variante única
-    const variant: ProductVariant = {
-      sku: sku,
-      option1: 'Default', // Como es producto individual, la opción es default
-      price: price,
-      inventory: inventory,
-      image: image
-    };
+    // Datos generales del producto
+    const title = getValue(mainRow, 'Title') || 'Sin Título';
+    const bodyHtml = getValue(mainRow, 'Body (HTML)') || '';
+    const description = stripHtml(bodyHtml) || getValue(mainRow, 'Image Alt Text') || '';
+    const vendor = getValue(mainRow, 'Vendor') || 'Cubitt';
+    const type = getValue(mainRow, 'Type') || 'General';
+    const tagsStr = getValue(mainRow, 'Tags') || '';
+    const tags = typeof tagsStr === 'string' ? tagsStr.split(',').map(t => t.trim()) : [];
 
-    // Crear producto
-    const product: Product = {
-      id: sku,
-      handle: handle,
-      title: title,
-      description: description,
-      vendor: 'Cubitt', // Valor por defecto o extraer si hubiera columna
-      category: 'General',
-      type: 'General',
-      mainImage: image,
-      variants: [variant],
-      tags: [],
+    // Construir variantes
+    const variants: ProductVariant[] = groupRows.map(row => {
+      const sku = getValue(row, 'Variant SKU') || `SKU-${Math.random().toString(36).substr(2, 9)}`;
+      const option1 = getValue(row, 'Option1 Value') || 'Default';
+      const price = getPrice(row, priceKey);
+      
+      const inventoryVal = getValue(row, 'Variant Inventory Qty');
+      const inventory = parseInt(String(inventoryVal || '0'), 10) || 0;
+
+      // Imagen: Prioridad Variant Image > Image Src
+      const image = getValue(row, 'Variant Image') || getValue(row, 'Image Src') || '';
+
+      return {
+        sku,
+        option1,
+        price,
+        inventory,
+        image
+      };
+    });
+
+    // Imagen principal del producto (usamos la de la primera variante o Image Src del mainRow)
+    const mainImage = variants.length > 0 && variants[0].image 
+      ? variants[0].image 
+      : (getValue(mainRow, 'Image Src') || '');
+
+    return {
+      id: handle, // Usamos handle como ID del producto
+      handle,
+      title,
+      description,
+      vendor,
+      category: type,
+      type,
+      mainImage,
+      variants,
+      tags,
       isBestSeller: false,
       isSale: false,
-      isOutOfStock: inventory <= 0,
-      restockingSoon: inventory <= 10 && inventory > 0
+      isOutOfStock: false, // Ya filtramos por inventario > 0, así que si existe, tiene stock
+      restockingSoon: false
     };
-
-    return product;
   });
+
+  return products;
 };
