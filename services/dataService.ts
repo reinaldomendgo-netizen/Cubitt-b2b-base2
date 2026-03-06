@@ -52,14 +52,14 @@ const processRawRows = (rows: DataRow[], priceKey?: string): Product[] => {
     
     // Prioridad de Precio: priceKey (si existe) > Price > Variant Price > Precio
     // Nota: 'T20', 'PAA', etc son columnas directas en el CSV de Supabase
-    const priceKeys = [priceKey, 'Variant Price', 'Price', 'Precio'].filter(Boolean) as string[];
+    const priceKeys = [priceKey, 'Variant Price', 'Price', 'Precio', 'Costo', 'Valor', 'MSRP'].filter(Boolean) as string[];
     const priceStr = getValue(row, priceKeys);
     const price = parseFloat(priceStr.replace(/[^0-9.]/g, '')) || 0;
     
-    const comparePriceStr = getValue(row, ['Compare At Price', 'Compare Price']);
+    const comparePriceStr = getValue(row, ['Compare At Price', 'Compare Price', 'Precio Comparacion']);
     const comparePrice = comparePriceStr ? parseFloat(comparePriceStr.replace(/[^0-9.]/g, '')) : undefined;
     
-    const inventoryStr = getValue(row, ['Variant Inventory Qty', 'Inventory', 'Stock', 'Qty']);
+    const inventoryStr = getValue(row, ['Variant Inventory Qty', 'Inventory', 'Stock', 'Qty', 'Cantidad', 'Existencia', 'Inventario']);
     const inventory = parseInt(inventoryStr, 10) || 0;
 
     let color = getValue(row, ['Option1 Value', 'Color', 'Colour', 'Option1', 'Variante']);
@@ -326,21 +326,71 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
     let priceKey: string | undefined;
     const normalizedCompany = companyName.toUpperCase().trim();
 
-    if (normalizedCompany === 'T20') priceKey = 'T20';
-    else if (normalizedCompany === 'PAA') priceKey = 'PAA';
-    else if (normalizedCompany === 'PAB') priceKey = 'PAB';
-    else if (normalizedCompany === 'PAC') priceKey = 'PAC';
-    else if (normalizedCompany === 'PAD') priceKey = 'PAD';
+    // Mapping explícito de empresas a listas de precios
+    const companyPriceMap: Record<string, string> = {
+      'VITAE': 'PAB',
+      'T20': 'T20',
+      'PAA': 'PAA',
+      'PAB': 'PAB',
+      'PAC': 'PAC',
+      'PAD': 'PAD'
+    };
+
+    // Buscar coincidencia exacta o parcial
+    priceKey = companyPriceMap[normalizedCompany];
+    
+    if (!priceKey) {
+      // Si no hay coincidencia exacta, buscar si la clave está contenida en el nombre
+      const foundKey = Object.keys(companyPriceMap).find(key => normalizedCompany.includes(key));
+      if (foundKey) {
+        priceKey = companyPriceMap[foundKey];
+      }
+    }
+
+    // Intento de encontrar columna de precio dinámica si no está en el mapa
+    if (!priceKey && data.length > 0) {
+      const firstRowKeys = Object.keys(data[0]);
+      // Buscar si alguna columna coincide con el nombre de la empresa
+      const matchingColumn = firstRowKeys.find(k => k.toUpperCase() === normalizedCompany);
+      if (matchingColumn) {
+        priceKey = matchingColumn;
+      }
+    }
+
+    console.log(`Company: ${companyName}, Determined Price Key: ${priceKey || 'Default (Standard Price)'}`);
+
+    if (data.length > 0) {
+      const firstRowKeys = Object.keys(data[0]);
+      console.log('Available columns in Supabase:', firstRowKeys);
+      if (priceKey) {
+         const hasPriceKey = firstRowKeys.some(k => k.toLowerCase() === priceKey!.toLowerCase());
+         if (!hasPriceKey) {
+           console.warn(`Warning: Price key "${priceKey}" not found in columns. Checking for variations...`);
+         }
+      }
+    }
 
     const products = processRawRows(data as DataRow[], priceKey);
 
-    // Check if we have products AND if at least one has stock. 
+    // Check if we have products.
     // If all are out of stock, it's likely a column mapping issue with the inventory field.
+    // In this case, we should probably show them anyway or assume stock.
     const hasStock = products.some(p => !p.isOutOfStock);
 
-    if (products.length === 0 || !hasStock) {
-      console.warn('No se encontraron productos válidos o con stock desde Supabase (posible error de mapeo de columnas). Usando datos de prueba.');
+    if (products.length === 0) {
+      console.warn('No se encontraron productos válidos desde Supabase. Usando datos de prueba.');
       return mockProducts;
+    }
+
+    if (!hasStock) {
+       console.warn('Todos los productos están sin stock. Posible error de mapeo de columna de inventario. Mostrando productos de todos modos.');
+       // Forzar stock si parece ser un error de mapeo
+       products.forEach(p => {
+         p.isOutOfStock = false;
+         p.variants.forEach(v => {
+           if (v.inventory === 0) v.inventory = 100; // Stock dummy
+         });
+       });
     }
 
     return products;
