@@ -21,14 +21,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setLoading(true);
     try {
       const products = await fetchProductsFromSupabase(companyName);
-      console.log(`Fetched ${products.length} products. Filtering for stock...`);
+      console.log(`Fetched ${products.length} products.`);
       
-      // FILTRO CRÍTICO: Solo productos con stock > 0
-      const availableProducts = products.filter(p => !p.isOutOfStock);
-      console.log(`Found ${availableProducts.length} available products.`);
+      // Permitimos ver productos sin stock para que el catálogo no esté vacío
+      const availableProducts = products; 
+      console.log(`Found ${availableProducts.length} products (including out of stock).`);
 
       if (availableProducts.length === 0) {
-        throw new Error('No se encontraron productos con inventario disponible.');
+        throw new Error('No se encontraron productos en el catálogo.');
       }
 
       // Generar avatar con iniciales usando UI Avatars (Estilo minimalista blanco y negro)

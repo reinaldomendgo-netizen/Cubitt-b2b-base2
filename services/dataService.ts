@@ -20,67 +20,7 @@ const stripHtml = (html: string): string => {
   return html.replace(/<[^>]*>?/gm, '').trim();
 };
 
-const processRowsAsIndividualProducts = (rows: DataRow[], priceKey?: string): Product[] => {
-  return rows.map((row) => {
-    // 1. Identificadores
-    const title = row['Title'] || 'Sin Título';
-    const sku = row['Variant SKU'] || `SKU-${Math.random().toString(36).substr(2, 9)}`;
-    const handle = sku; // Usamos SKU como handle único ya que cada variante es un producto
 
-    // 2. Precios
-    // Lógica: Si existe priceKey (ej: T20) y tiene valor, usarlo. Si no, usar Variant Price.
-    let price = 0;
-    if (priceKey && row[priceKey] !== undefined && row[priceKey] !== null && row[priceKey] !== '') {
-      const p = parseFloat(String(row[priceKey]).replace(/[^0-9.]/g, ''));
-      if (!isNaN(p)) price = p;
-    }
-    
-    if (price === 0) {
-      const p = parseFloat(String(row['Variant Price']).replace(/[^0-9.]/g, ''));
-      if (!isNaN(p)) price = p;
-    }
-
-    // 3. Inventario
-    const inventory = parseInt(String(row['Variant Inventory Qty']), 10) || 0;
-
-    // 4. Imagen
-    // Prioridad: Variant Image > Image Src
-    const image = row['Variant Image'] || row['Image Src'] || '';
-
-    // 5. Otros datos
-    const barcode = row['Variant Barcode'] || '';
-    const description = row['Image Alt Text'] || ''; // Usamos Alt Text como descripción breve si no hay otra
-
-    // Crear variante única
-    const variant: ProductVariant = {
-      sku: sku,
-      option1: 'Default', // Como es producto individual, la opción es default
-      price: price,
-      inventory: inventory,
-      image: image
-    };
-
-    // Crear producto
-    const product: Product = {
-      id: sku,
-      handle: handle,
-      title: title,
-      description: description,
-      vendor: 'Cubitt', // Valor por defecto o extraer si hubiera columna
-      category: 'General',
-      type: 'General',
-      mainImage: image,
-      variants: [variant],
-      tags: [],
-      isBestSeller: false,
-      isSale: false,
-      isOutOfStock: inventory <= 0,
-      restockingSoon: inventory <= 10 && inventory > 0
-    };
-
-    return product;
-  });
-};
 
 export const parseCSVToProducts = (csvText: string): Promise<Product[]> => {
   return new Promise((resolve, reject) => {
@@ -138,10 +78,10 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
     // Columnas requeridas: Title, Variant SKU, Variant Price, Variant Inventory Qty, Variant Image, Image Src, Image Alt Text, Variant Barcode, T20, PAA, PAB, PAC, PAD
     console.log(`Cargando productos desde tabla: "productos"...`);
     
-    // Nota: Supabase permite seleccionar columnas con espacios usando comillas dobles
+    // Usamos select('*') para evitar errores si falta alguna columna específica o si hay diferencias en mayúsculas/minúsculas
     const { data, error } = await supabase
       .from('productos')
-      .select('"Title", "Variant SKU", "Variant Price", "Variant Inventory Qty", "Variant Image", "Image Src", "Image Alt Text", "Variant Barcode", "T20", "PAA", "PAB", "PAC", "PAD"')
+      .select('*')
       .range(0, 9999);
 
     if (error) {
@@ -165,4 +105,78 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
     console.error("Error general en fetchProductsFromSupabase:", error);
     return [];
   }
+};
+
+const processRowsAsIndividualProducts = (rows: DataRow[], priceKey?: string): Product[] => {
+  // Helper para obtener valores de forma insensible a mayúsculas/minúsculas
+  const getValue = (row: DataRow, key: string) => {
+    if (row[key] !== undefined) return row[key];
+    const foundKey = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase());
+    return foundKey ? row[foundKey] : undefined;
+  };
+
+  return rows.map((row) => {
+    // 1. Identificadores
+    const title = getValue(row, 'Title') || 'Sin Título';
+    const sku = getValue(row, 'Variant SKU') || `SKU-${Math.random().toString(36).substr(2, 9)}`;
+    const handle = sku; // Usamos SKU como handle único ya que cada variante es un producto
+
+    // 2. Precios
+    // Lógica: Si existe priceKey (ej: T20) y tiene valor, usarlo. Si no, usar Variant Price.
+    let price = 0;
+    if (priceKey) {
+      const val = getValue(row, priceKey);
+      if (val !== undefined && val !== null && val !== '') {
+        const p = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+        if (!isNaN(p)) price = p;
+      }
+    }
+    
+    if (price === 0) {
+      const val = getValue(row, 'Variant Price');
+      const p = parseFloat(String(val || '0').replace(/[^0-9.]/g, ''));
+      if (!isNaN(p)) price = p;
+    }
+
+    // 3. Inventario
+    const inventoryVal = getValue(row, 'Variant Inventory Qty');
+    const inventory = parseInt(String(inventoryVal || '0'), 10) || 0;
+
+    // 4. Imagen
+    // Prioridad: Variant Image > Image Src
+    const image = getValue(row, 'Variant Image') || getValue(row, 'Image Src') || '';
+
+    // 5. Otros datos
+    const barcode = getValue(row, 'Variant Barcode') || '';
+    const description = getValue(row, 'Image Alt Text') || ''; // Usamos Alt Text como descripción breve si no hay otra
+
+    // Crear variante única
+    const variant: ProductVariant = {
+      sku: sku,
+      option1: 'Default', // Como es producto individual, la opción es default
+      price: price,
+      inventory: inventory,
+      image: image
+    };
+
+    // Crear producto
+    const product: Product = {
+      id: sku,
+      handle: handle,
+      title: title,
+      description: description,
+      vendor: 'Cubitt', // Valor por defecto o extraer si hubiera columna
+      category: 'General',
+      type: 'General',
+      mainImage: image,
+      variants: [variant],
+      tags: [],
+      isBestSeller: false,
+      isSale: false,
+      isOutOfStock: inventory <= 0,
+      restockingSoon: inventory <= 10 && inventory > 0
+    };
+
+    return product;
+  });
 };
