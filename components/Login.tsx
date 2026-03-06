@@ -21,9 +21,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setLoading(true);
     try {
       const products = await fetchProductsFromSupabase(companyName);
+      console.log(`Fetched ${products.length} products. Filtering for stock...`);
       
       // FILTRO CRÍTICO: Solo productos con stock > 0
       const availableProducts = products.filter(p => !p.isOutOfStock);
+      console.log(`Found ${availableProducts.length} available products.`);
 
       if (availableProducts.length === 0) {
         throw new Error('No se encontraron productos con inventario disponible.');

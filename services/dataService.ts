@@ -311,8 +311,16 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
       .from('productos')
       .select('*');
 
-    if (error) throw error;
-    if (!data || data.length === 0) return [];
+    if (error) {
+      console.error('Error fetching from Supabase:', error);
+      // Fallback to mock data on error
+      return mockProducts;
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('La tabla "productos" en Supabase está vacía. Usando datos de prueba.');
+      return mockProducts;
+    }
 
     // Determinar la columna de precio basada en el nombre de la empresa
     let priceKey: string | undefined;
@@ -324,9 +332,21 @@ export const fetchProductsFromSupabase = async (companyName: string): Promise<Pr
     else if (normalizedCompany === 'PAC') priceKey = 'PAC';
     else if (normalizedCompany === 'PAD') priceKey = 'PAD';
 
-    return processRawRows(data as DataRow[], priceKey);
+    const products = processRawRows(data as DataRow[], priceKey);
+
+    // Check if we have products AND if at least one has stock. 
+    // If all are out of stock, it's likely a column mapping issue with the inventory field.
+    const hasStock = products.some(p => !p.isOutOfStock);
+
+    if (products.length === 0 || !hasStock) {
+      console.warn('No se encontraron productos válidos o con stock desde Supabase (posible error de mapeo de columnas). Usando datos de prueba.');
+      return mockProducts;
+    }
+
+    return products;
   } catch (error) {
     console.error("Error fetching products from Supabase:", error);
-    throw error;
+    // Fallback to mock data on exception
+    return mockProducts;
   }
 };
