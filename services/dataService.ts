@@ -15,7 +15,7 @@ const stripHtml = (html: string): string => {
   return html.replace(/<[^>]*>?/gm, '').trim();
 };
 
-const processRawRows = (rows: DataRow[], priceKey?: string): Product[] => {
+const processRawRows = (rows: DataRow[], priceKey?: string, filterZeroInventory: boolean = false): Product[] => {
   const productMap: Record<string, Product> = {};
 
   // Helper: Encuentra el valor de una columna buscando por varias posibles claves (insensible a mayúsculas/símbolos)
@@ -46,12 +46,19 @@ const processRawRows = (rows: DataRow[], priceKey?: string): Product[] => {
     if (!handle) return; // Fila inválida si no tiene handle
 
     // 2. Extraer Datos con Prioridad
+    const inventoryStr = getValue(row, ['Variant Inventory Qty', 'Inventory', 'Stock', 'Qty', 'Cantidad', 'Existencia', 'Inventario']);
+    const inventory = parseInt(inventoryStr, 10) || 0;
+
+    // FILTRO: Si se requiere filtrar inventario cero y el inventario es <= 0, saltar esta variante.
+    if (filterZeroInventory && inventory <= 0) {
+      return;
+    }
+
     // Prioridad de Imagen: Variant Image (Específica) > Image Src (Estándar) > Image (Genérica)
     const variantImage = getValue(row, ['Variant Image', 'Imagen Variante']);
     const mainImage = getValue(row, ['Image Src', 'Image', 'Imagen', 'Photo']);
     
     // Prioridad de Precio: priceKey (si existe) > Price > Variant Price > Precio
-    // Nota: 'T20', 'PAA', etc son columnas directas en el CSV de Supabase
     const priceKeys = [priceKey, 'Variant Price', 'Price', 'Precio', 'Costo', 'Valor', 'MSRP'].filter(Boolean) as string[];
     const priceStr = getValue(row, priceKeys);
     const price = parseFloat(priceStr.replace(/[^0-9.]/g, '')) || 0;
@@ -59,9 +66,6 @@ const processRawRows = (rows: DataRow[], priceKey?: string): Product[] => {
     const comparePriceStr = getValue(row, ['Compare At Price', 'Compare Price', 'Precio Comparacion']);
     const comparePrice = comparePriceStr ? parseFloat(comparePriceStr.replace(/[^0-9.]/g, '')) : undefined;
     
-    const inventoryStr = getValue(row, ['Variant Inventory Qty', 'Inventory', 'Stock', 'Qty', 'Cantidad', 'Existencia', 'Inventario']);
-    const inventory = parseInt(inventoryStr, 10) || 0;
-
     let color = getValue(row, ['Option1 Value', 'Color', 'Colour', 'Option1', 'Variante']);
     // Filtro para eliminar "Default" o "Default Title" (común en exports de Shopify)
     if (!color || color.toLowerCase() === 'default' || color.toLowerCase() === 'default title') {
@@ -134,7 +138,9 @@ const processRawRows = (rows: DataRow[], priceKey?: string): Product[] => {
   });
 
   // 5. Post-procesamiento y Limpieza
-  return Object.values(productMap).map(product => {
+  return Object.values(productMap)
+    .filter(product => product.variants.length > 0) // Filtrar productos sin variantes (por ejemplo, si todas tenían stock 0)
+    .map(product => {
     // Limpieza de Título: "AURA 2" es mejor que "aura-2"
     if (product.title === product.handle) {
        product.title = product.handle.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -301,102 +307,71 @@ const mockProducts: Product[] = [
 
 export const fetchProductsFromSupabase = async (companyName: string): Promise<Product[]> => {
   if (!isSupabaseConfigured()) {
-    console.warn('Supabase no está configurado. Usando datos de prueba (mock data).');
-    // Return mock data after a short delay to simulate network request
-    return new Promise(resolve => setTimeout(() => resolve(mockProducts), 800));
+    console.warn('Supabase no está configurado.');
+    return [];
   }
 
   try {
-    const { data, error } = await supabase
+    // 1. Consultar tabla 'clientes' para obtener el tipo de precio
+    let priceKey: string | undefined;
+    
+    // Normalizar nombre de empresa para búsqueda (opcional, depende de cómo estén los datos)
+    // Asumimos búsqueda exacta o insensible a mayúsculas según la DB
+    const { data: clientData, error: clientError } = await supabase
+      .from('clientes')
+      .select('tipo_precio')
+      .ilike('empresa', companyName) // ilike para case-insensitive matching
+      .maybeSingle();
+
+    if (clientError) {
+      console.error('Error fetching client:', clientError);
+    }
+
+    if (clientData && clientData.tipo_precio) {
+      priceKey = clientData.tipo_precio;
+      console.log(`Cliente encontrado: ${companyName}, Tipo de Precio: ${priceKey}`);
+    } else {
+      console.log(`Cliente no encontrado o sin tipo de precio: ${companyName}. Usando precio base.`);
+    }
+
+    // 2. Consultar tabla 'productos' (o 'products')
+    // Cargar TODAS las filas, sin límites.
+    let { data, error } = await supabase
       .from('productos')
-      .select('*');
+      .select('*')
+      .range(0, 9999);
+
+    // Fallback a tabla 'products' si 'productos' falla o está vacía
+    if (error || !data || data.length === 0) {
+       console.warn('Tabla "productos" vacía o error. Intentando "products"...');
+       const result2 = await supabase
+        .from('products')
+        .select('*')
+        .range(0, 9999);
+       
+       if (result2.data && result2.data.length > 0) {
+         data = result2.data;
+         error = result2.error;
+       }
+    }
 
     if (error) {
-      console.error('Error fetching from Supabase:', error);
-      // Fallback to mock data on error
-      return mockProducts;
+      console.error('Error fetching products from Supabase:', error);
+      throw error;
     }
 
     if (!data || data.length === 0) {
-      console.warn('La tabla "productos" en Supabase está vacía. Usando datos de prueba.');
-      return mockProducts;
+      console.warn('No se encontraron productos en Supabase.');
+      return [];
     }
 
-    // Determinar la columna de precio basada en el nombre de la empresa
-    let priceKey: string | undefined;
-    const normalizedCompany = companyName.toUpperCase().trim();
-
-    // Mapping explícito de empresas a listas de precios
-    const companyPriceMap: Record<string, string> = {
-      'VITAE': 'PAB',
-      'T20': 'T20',
-      'PAA': 'PAA',
-      'PAB': 'PAB',
-      'PAC': 'PAC',
-      'PAD': 'PAD'
-    };
-
-    // Buscar coincidencia exacta o parcial
-    priceKey = companyPriceMap[normalizedCompany];
-    
-    if (!priceKey) {
-      // Si no hay coincidencia exacta, buscar si la clave está contenida en el nombre
-      const foundKey = Object.keys(companyPriceMap).find(key => normalizedCompany.includes(key));
-      if (foundKey) {
-        priceKey = companyPriceMap[foundKey];
-      }
-    }
-
-    // Intento de encontrar columna de precio dinámica si no está en el mapa
-    if (!priceKey && data.length > 0) {
-      const firstRowKeys = Object.keys(data[0]);
-      // Buscar si alguna columna coincide con el nombre de la empresa
-      const matchingColumn = firstRowKeys.find(k => k.toUpperCase() === normalizedCompany);
-      if (matchingColumn) {
-        priceKey = matchingColumn;
-      }
-    }
-
-    console.log(`Company: ${companyName}, Determined Price Key: ${priceKey || 'Default (Standard Price)'}`);
-
-    if (data.length > 0) {
-      const firstRowKeys = Object.keys(data[0]);
-      console.log('Available columns in Supabase:', firstRowKeys);
-      if (priceKey) {
-         const hasPriceKey = firstRowKeys.some(k => k.toLowerCase() === priceKey!.toLowerCase());
-         if (!hasPriceKey) {
-           console.warn(`Warning: Price key "${priceKey}" not found in columns. Checking for variations...`);
-         }
-      }
-    }
-
-    const products = processRawRows(data as DataRow[], priceKey);
-
-    // Check if we have products.
-    // If all are out of stock, it's likely a column mapping issue with the inventory field.
-    // In this case, we should probably show them anyway or assume stock.
-    const hasStock = products.some(p => !p.isOutOfStock);
-
-    if (products.length === 0) {
-      console.warn('No se encontraron productos válidos desde Supabase. Usando datos de prueba.');
-      return mockProducts;
-    }
-
-    if (!hasStock) {
-       console.warn('Todos los productos están sin stock. Posible error de mapeo de columna de inventario. Mostrando productos de todos modos.');
-       // Forzar stock si parece ser un error de mapeo
-       products.forEach(p => {
-         p.isOutOfStock = false;
-         p.variants.forEach(v => {
-           if (v.inventory === 0) v.inventory = 100; // Stock dummy
-         });
-       });
-    }
+    // 3. Procesar filas
+    // Pasamos true para filtrar inventario > 0 estrictamente
+    const products = processRawRows(data as DataRow[], priceKey, true);
 
     return products;
   } catch (error) {
-    console.error("Error fetching products from Supabase:", error);
-    // Fallback to mock data on exception
-    return mockProducts;
+    console.error("Error general en fetchProductsFromSupabase:", error);
+    return [];
   }
 };
