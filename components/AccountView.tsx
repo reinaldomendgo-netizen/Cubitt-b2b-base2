@@ -1,6 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { User, Order } from '../types';
+import PdfTemplate from './PdfTemplate';
 
 interface AccountViewProps {
   user: User;
@@ -10,6 +11,44 @@ interface AccountViewProps {
 }
 
 const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDeleteOrder }) => {
+  const [downloadingOrderId, setDownloadingOrderId] = useState<string | null>(null);
+
+  const handleDownloadPDF = async (order: Order) => {
+    setDownloadingOrderId(order.id);
+    
+    // Allow React to render the PdfTemplate with the selected order
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById('proforma-invoice-content');
+        if (!element) throw new Error('No se encontró el contenido para generar el PDF');
+
+        // @ts-ignore
+        const html2pdf = window.html2pdf;
+        if (typeof html2pdf !== 'function') throw new Error('Librería PDF no cargada');
+        
+        const clientName = user?.companyName?.replace(/[^a-zA-Z0-9]/g, '_') || 'Cliente';
+        
+        const opt = {
+          margin:       0.3, 
+          filename:     `${clientName}_PF_${order.id}.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, logging: false, scrollY: 0 },
+          jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+          pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        await html2pdf().set(opt).from(element).save();
+      } catch (error) {
+        console.error(error);
+        alert('Error generando PDF. Intente nuevamente.');
+      } finally {
+        setDownloadingOrderId(null);
+      }
+    }, 100);
+  };
+
+  const downloadingOrder = orders.find(o => o.id === downloadingOrderId);
+
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-4 md:py-8 animate-in fade-in zoom-in-95 duration-500 pb-24">
       <nav className="mb-4 md:mb-6">
@@ -72,6 +111,7 @@ const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDelet
                         {orders.map((order) => {
                             const totalItems = order.items.reduce((acc, curr) => acc + curr.quantity, 0);
                             const isPaid = order.status === 'Paid';
+                            const isDownloading = downloadingOrderId === order.id;
 
                             return (
                                 <div key={order.id} className="group bg-[#F5F5F7] rounded-[24px] p-5 md:p-6 transition-all hover:bg-[#EAEAEA] border border-black/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -92,28 +132,43 @@ const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDelet
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between w-full md:w-auto gap-6 md:gap-8 border-t md:border-t-0 border-black/5 pt-4 md:pt-0">
+                                    <div className="flex items-center justify-between w-full md:w-auto gap-4 md:gap-6 border-t md:border-t-0 border-black/5 pt-4 md:pt-0">
                                         <div className="text-right">
                                             <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Total</div>
                                             <div className="text-lg md:text-xl font-black text-black">${order.total.toFixed(2)}</div>
                                         </div>
                                         
-                                        {/* Solo permitir borrar si el estado es 'Paid' */}
-                                        {isPaid ? (
+                                        <div className="flex gap-2">
                                             <button 
-                                                onClick={() => {
-                                                    if(window.confirm('¿Eliminar este pedido pagado del historial?')) onDeleteOrder(order.id);
-                                                }}
-                                                className="w-10 h-10 rounded-xl bg-white border border-red-100 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors shadow-sm"
-                                                title="Eliminar Pedido"
+                                                onClick={() => handleDownloadPDF(order)}
+                                                disabled={isDownloading}
+                                                className="w-10 h-10 rounded-xl bg-white border border-gray-200 text-gray-700 flex items-center justify-center hover:bg-black hover:text-white transition-colors shadow-sm disabled:opacity-50"
+                                                title="Descargar PDF"
                                             >
-                                                <span className="material-icons text-lg">delete</span>
+                                                {isDownloading ? (
+                                                    <span className="material-icons text-lg animate-spin">refresh</span>
+                                                ) : (
+                                                    <span className="material-icons text-lg">picture_as_pdf</span>
+                                                )}
                                             </button>
-                                        ) : (
-                                            <div className="w-10 h-10 flex items-center justify-center opacity-20 cursor-not-allowed" title="Pedido pendiente no se puede eliminar">
-                                                <span className="material-icons text-lg text-gray-400">lock</span>
-                                            </div>
-                                        )}
+                                            
+                                            {/* Solo permitir borrar si el estado es 'Paid' */}
+                                            {isPaid ? (
+                                                <button 
+                                                    onClick={() => {
+                                                        if(window.confirm('¿Eliminar este pedido pagado del historial?')) onDeleteOrder(order.id);
+                                                    }}
+                                                    className="w-10 h-10 rounded-xl bg-white border border-red-100 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors shadow-sm"
+                                                    title="Eliminar Pedido"
+                                                >
+                                                    <span className="material-icons text-lg">delete</span>
+                                                </button>
+                                            ) : (
+                                                <div className="w-10 h-10 flex items-center justify-center opacity-20 cursor-not-allowed" title="Pedido pendiente no se puede eliminar">
+                                                    <span className="material-icons text-lg text-gray-400">lock</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -124,6 +179,19 @@ const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDelet
         </div>
 
       </div>
+
+      {downloadingOrder && (
+        <PdfTemplate 
+          user={user}
+          cart={downloadingOrder.items}
+          orderId={downloadingOrder.id.replace('ORD-', '')}
+          date={downloadingOrder.date}
+          subtotal={downloadingOrder.subtotal}
+          tax={downloadingOrder.tax}
+          total={downloadingOrder.total}
+          totalQuantity={downloadingOrder.items.reduce((acc, curr) => acc + curr.quantity, 0)}
+        />
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Product } from '../types';
-import { fetchProductsFromSupabase } from '../services/dataService';
+import { fetchClientPriceType, fetchRawProducts, processRawRows } from '../services/dataService';
 
 interface LoginProps {
   onLogin: (user: User, products: Product[]) => void;
@@ -10,6 +10,24 @@ interface LoginProps {
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rawProducts, setRawProducts] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const data = await fetchRawProducts();
+        setRawProducts(data);
+      } catch (err: any) {
+        console.error("Error loading products:", err);
+        setError("Error al cargar el catálogo inicial. Por favor recargue la página.");
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,16 +37,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     setLoading(true);
-    try {
-      const products = await fetchProductsFromSupabase(companyName);
-      console.log(`Fetched ${products.length} products.`);
-      
-      // Permitimos ver productos sin stock para que el catálogo no esté vacío
-      const availableProducts = products; 
-      console.log(`Found ${availableProducts.length} products (including out of stock).`);
+    setError(null);
 
-      if (availableProducts.length === 0) {
-        throw new Error('No se encontraron productos en el catálogo.');
+    try {
+      // 1. Obtener tipo de precio
+      const priceType = await fetchClientPriceType(companyName);
+      console.log(`Cliente: ${companyName}, Tipo de precio: ${priceType || 'Default'}`);
+
+      // 2. Procesar productos con el tipo de precio
+      const products = processRawRows(rawProducts, priceType || undefined);
+
+      if (products.length === 0) {
+        throw new Error('No se encontraron productos disponibles.');
       }
 
       // Generar avatar con iniciales usando UI Avatars (Estilo minimalista blanco y negro)
@@ -42,10 +62,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         authorized: true,
         contractUpdateDate: new Date().toLocaleDateString('es-PA'),
         avatar: avatarUrl
-      }, availableProducts);
+      }, products);
+
     } catch (err: any) {
       console.error(err);
-      alert(`Error al cargar catálogo: ${err.message || 'Error desconocido'}`);
+      setError(err.message || 'Error al procesar los datos.');
     } finally {
       setLoading(false);
     }
@@ -59,7 +80,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <span className="material-icons text-2xl">layers</span>
           </div>
           <h1 className="text-2xl font-black uppercase tracking-tighter text-black">Cubitt B2B</h1>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-2">Portal Corporativo</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-2">Portal de Ventas</p>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -72,23 +93,41 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               type="text"
               value={companyName}
               onChange={e => setCompanyName(e.target.value)}
+              disabled={loading || initialLoading}
             />
           </div>
+
+          {error && (
+            <div className="p-4 bg-red-50 text-red-600 text-xs rounded-xl border border-red-100">
+              {error}
+            </div>
+          )}
 
           <div className="pt-4">
              <button 
                 type="submit"
-                disabled={!companyName || loading}
+                disabled={!companyName || loading || initialLoading}
                 className="w-full bg-black text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-95 transition-all shadow-xl hover:shadow-2xl disabled:opacity-50 disabled:scale-100 disabled:shadow-none flex items-center justify-center gap-2"
              >
-                {loading && <span className="material-icons animate-spin text-sm">refresh</span>}
-                {loading ? 'Cargando Catálogo...' : 'Ingresar'}
+                {initialLoading ? (
+                  <>
+                    <span className="material-icons animate-spin text-sm">refresh</span>
+                    <span>Iniciando Sistema...</span>
+                  </>
+                ) : loading ? (
+                  <>
+                    <span className="material-icons animate-spin text-sm">refresh</span>
+                    <span>Procesando...</span>
+                  </>
+                ) : (
+                  <span>Ingresar</span>
+                )}
              </button>
           </div>
         </form>
         
         <div className="mt-8 text-center">
-            <p className="text-[8px] text-gray-300 font-medium uppercase tracking-widest">Acceso exclusivo para distribuidores autorizados</p>
+            <p className="text-[8px] text-gray-300 font-medium uppercase tracking-widest">Powered by Supabase</p>
         </div>
       </div>
     </div>
