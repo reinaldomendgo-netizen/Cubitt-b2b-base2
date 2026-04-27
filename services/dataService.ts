@@ -35,11 +35,16 @@ export const processRawRows = (rows: DataRow[], priceType?: string): Product[] =
 
   const getPrice = (row: DataRow, type: string | undefined): number => {
     let priceVal: any;
-    if (type === "T20") priceVal = row.T20;
-    else if (type === "PAA") priceVal = row.PAA;
-    else if (type === "PAB") priceVal = row.PAB;
-    else if (type === "PAC") priceVal = row.PAC;
-    else if (type === "PAD") priceVal = row.PAD;
+    
+    if (type) {
+      const normalizedType = type.trim().toUpperCase();
+      const rowKeys = Object.keys(row);
+      // Intentar encontrar la columna exacta ignorando espacios y mayúsculas
+      const foundKey = rowKeys.find(k => k.trim().toUpperCase() === normalizedType);
+      if (foundKey) {
+        priceVal = row[foundKey];
+      }
+    }
     
     if (priceVal === undefined || priceVal === null || String(priceVal).trim() === '') {
        // Fallback to standard price columns
@@ -165,11 +170,11 @@ export const fetchClientPriceType = async (companyName: string): Promise<string 
   const { data, error } = await supabase
     .from('clientes')
     .select('Tipo_precio')
-    .ilike('Empresa', companyName)
-    .single();
+    .ilike('Empresa', companyName.trim())
+    .limit(1);
 
-  if (error || !data) return null;
-  return data.Tipo_precio;
+  if (error || !data || data.length === 0) return null;
+  return data[0].Tipo_precio;
 };
 
 export const fetchRawProducts = async (): Promise<DataRow[]> => {

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Category, Product } from '../types';
+import { Category, Product, AppView } from '../types';
 
 interface SidebarProps {
   products: Product[];
@@ -11,6 +11,8 @@ interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
   showDesktop?: boolean;
+  onNavigate?: (view: AppView) => void;
+  currentView?: AppView;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -19,7 +21,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   setSelectedCategory, 
   isOpen = false,
   onClose,
-  showDesktop = true
+  showDesktop = true,
+  onNavigate,
+  currentView
 }) => {
   const types: string[] = Array.from<string>(new Set(products.map(p => p.type))).sort();
   
@@ -44,6 +48,41 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const sidebarContent = (
     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar h-full pb-20 md:pb-0">
+      {/* Mobile Navigation Links */}
+      {!showDesktop && onNavigate && (
+        <div className="mb-8 lg:hidden">
+          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 px-3">Menú Principal</h3>
+          <ul className="space-y-1">
+            <li>
+              <button
+                onClick={() => { onNavigate('CATALOG'); if(onClose) onClose(); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                  currentView === 'CATALOG' 
+                    ? 'bg-black text-white shadow-md' 
+                    : 'text-gray-600 hover:bg-white hover:text-black font-medium'
+                }`}
+              >
+                <span className="material-icons text-lg">grid_view</span>
+                <span className="text-sm">Catálogo</span>
+              </button>
+            </li>
+            <li>
+              <button
+                onClick={() => { onNavigate('ACCOUNT'); if(onClose) onClose(); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                  currentView === 'ACCOUNT' 
+                    ? 'bg-black text-white shadow-md' 
+                    : 'text-gray-600 hover:bg-white hover:text-black font-medium'
+                }`}
+              >
+                <span className="material-icons text-lg">person</span>
+                <span className="text-sm">Mi Cuenta / Pedidos</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      )}
+
       <div className="mb-8">
         <h3 className="text-[10px] md:text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 px-3">Categorías</h3>
         <ul className="space-y-1">

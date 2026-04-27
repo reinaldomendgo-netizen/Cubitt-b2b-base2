@@ -17,11 +17,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const data = await fetchRawProducts();
-        setRawProducts(data);
+        const productsData = await fetchRawProducts();
+        
+        setRawProducts(productsData);
       } catch (err: any) {
         console.error("Error loading products:", err);
-        setError("Error al cargar el catálogo inicial. Por favor recargue la página.");
+        setError("Error al cargar datos. Por favor recargue la página.");
       } finally {
         setInitialLoading(false);
       }

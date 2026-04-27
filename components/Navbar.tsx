@@ -89,12 +89,15 @@ const Navbar: React.FC<NavbarProps> = ({ user, cartCount, onOpenCart, onNavigate
                )}
             </button>
 
-            <button onClick={() => onNavigate('ACCOUNT')} className="hidden md:flex items-center gap-4 pl-6 border-l border-black/5 group">
+            <button 
+              onClick={() => onNavigate('ACCOUNT')} 
+              className="flex items-center gap-2 md:gap-4 md:pl-6 md:border-l border-black/5 group p-2 md:p-0"
+            >
               <div className="text-right hidden xl:block">
                 <p className="text-[11px] font-black uppercase text-black leading-none mb-1">{user.companyName}</p>
                 <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Ver Perfil</p>
               </div>
-              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-xs ${avatarColor}`}>
+              <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-[10px] md:text-xs ${avatarColor}`}>
                 {user.avatar ? (
                   <img 
                     src={user.avatar} 

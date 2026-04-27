@@ -127,6 +127,8 @@ const App: React.FC = () => {
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
         showDesktop={false}
+        onNavigate={navigateTo}
+        currentView={currentView}
       />
 
       {currentView === 'CATALOG' && (
@@ -140,6 +142,8 @@ const App: React.FC = () => {
             isOpen={false}
             onClose={() => {}}
             showDesktop={true}
+            onNavigate={navigateTo}
+            currentView={currentView}
           />
           
           <ProductGrid 
