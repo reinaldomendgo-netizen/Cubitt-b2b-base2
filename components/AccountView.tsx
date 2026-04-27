@@ -8,12 +8,14 @@ interface AccountViewProps {
   onBack: () => void;
   orders: Order[];
   onDeleteOrder: (id: string) => void;
+  onViewOrder: (order: Order) => void;
 }
 
-const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDeleteOrder }) => {
+const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDeleteOrder, onViewOrder }) => {
   const [downloadingOrderId, setDownloadingOrderId] = useState<string | null>(null);
 
-  const handleDownloadPDF = async (order: Order) => {
+  const handleDownloadPDF = async (order: Order, e: React.MouseEvent) => {
+    e.stopPropagation(); // Evitar que el click se propague a la fila
     setDownloadingOrderId(order.id);
     
     // Allow React to render the PdfTemplate with the selected order
@@ -114,14 +116,18 @@ const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDelet
                             const isDownloading = downloadingOrderId === order.id;
 
                             return (
-                                <div key={order.id} className="group bg-[#F5F5F7] rounded-[24px] p-5 md:p-6 transition-all hover:bg-[#EAEAEA] border border-black/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                <div 
+                                  key={order.id} 
+                                  onClick={() => onViewOrder(order)}
+                                  className="group bg-[#F5F5F7] rounded-[24px] p-5 md:p-6 transition-all hover:bg-[#EAEAEA] border border-black/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer"
+                                >
                                     <div className="flex items-center gap-4 md:gap-6">
                                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${isPaid ? 'bg-black' : 'bg-gray-400'}`}>
                                             <span className="material-icons">{isPaid ? 'check_circle' : 'pending'}</span>
                                         </div>
                                         <div>
                                             <div className="flex items-center gap-3 mb-1">
-                                                <span className="text-sm md:text-base font-black text-black tracking-tight">{order.id}</span>
+                                                <span className="text-sm md:text-base font-black text-black tracking-tight hover:underline">{order.id}</span>
                                                 <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${isPaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                                     {order.status}
                                                 </span>
@@ -138,9 +144,9 @@ const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDelet
                                             <div className="text-lg md:text-xl font-black text-black">${order.total.toFixed(2)}</div>
                                         </div>
                                         
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                                             <button 
-                                                onClick={() => handleDownloadPDF(order)}
+                                                onClick={(e) => handleDownloadPDF(order, e)}
                                                 disabled={isDownloading}
                                                 className="w-10 h-10 rounded-xl bg-white border border-gray-200 text-gray-700 flex items-center justify-center hover:bg-black hover:text-white transition-colors shadow-sm disabled:opacity-50"
                                                 title="Descargar PDF"
@@ -155,7 +161,8 @@ const AccountView: React.FC<AccountViewProps> = ({ user, onBack, orders, onDelet
                                             {/* Solo permitir borrar si el estado es 'Paid' */}
                                             {isPaid ? (
                                                 <button 
-                                                    onClick={() => {
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         if(window.confirm('¿Eliminar este pedido pagado del historial?')) onDeleteOrder(order.id);
                                                     }}
                                                     className="w-10 h-10 rounded-xl bg-white border border-red-100 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors shadow-sm"

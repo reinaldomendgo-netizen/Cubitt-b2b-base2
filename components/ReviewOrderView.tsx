@@ -11,6 +11,8 @@ interface ReviewOrderViewProps {
   onBack: () => void;
   onConfirm: () => void;
   onSaveOrder: (order: Order) => void;
+  isReadOnly?: boolean;
+  existingOrder?: Order;
 }
 
 const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({ 
@@ -20,18 +22,20 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
   onRemove, 
   onBack, 
   onConfirm,
-  onSaveOrder
+  onSaveOrder,
+  isReadOnly = false,
+  existingOrder
 }) => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   
-  // Generar ID de orden único y estable para esta sesión de vista
-  const orderId = useMemo(() => Date.now().toString().slice(-7), []);
-
-  // Cálculos financieros
-  const subtotal = cart.reduce((acc, curr) => acc + (curr.variant.price * curr.quantity), 0);
-  const tax = subtotal * 0.07;
-  const total = subtotal + tax;
+  // Usar datos de la orden existente o generar nuevos
+  const orderId = existingOrder ? existingOrder.id.replace('ORD-', '') : useMemo(() => Date.now().toString().slice(-7), []);
+  const subtotal = existingOrder ? existingOrder.subtotal : cart.reduce((acc, curr) => acc + (curr.variant.price * curr.quantity), 0);
+  const tax = existingOrder ? existingOrder.tax : subtotal * 0.07;
+  const total = existingOrder ? existingOrder.total : subtotal + tax;
   const totalQuantity = cart.reduce((acc, curr) => acc + curr.quantity, 0);
+  const orderDate = existingOrder ? existingOrder.date : new Date().toLocaleDateString('es-PA', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const pdfDate = existingOrder ? existingOrder.date.split(',')[0] : new Date().toLocaleDateString('es-PA', { year: 'numeric', month: 'long', day: 'numeric' });
   
   const buildOrderText = () => {
     const br = "\n";
@@ -47,9 +51,10 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
   };
 
   const saveToHistory = (status: 'Paid' | 'Pending') => {
+    if (isReadOnly) return; // No guardar si estamos viendo el historial
     const newOrder: Order = {
       id: `ORD-${orderId}`,
-      date: new Date().toLocaleDateString('es-PA', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      date: orderDate,
       items: [...cart],
       subtotal,
       tax,
@@ -88,9 +93,11 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
 
       await html2pdf().set(opt).from(element).save();
       
-      saveToHistory('Paid');
-      // Esperar un momento antes de limpiar para que el usuario perciba la acción
-      setTimeout(() => onConfirm(), 2000);
+      if (!isReadOnly) {
+          saveToHistory('Paid');
+          // Esperar un momento antes de limpiar para que el usuario perciba la acción
+          setTimeout(() => onConfirm(), 2000);
+      }
       
     } catch (error) {
       console.error(error);
@@ -100,7 +107,7 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
     }
   };
 
-  if (cart.length === 0) {
+  if (cart.length === 0 && !isReadOnly) {
      return (
         <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
@@ -116,19 +123,23 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
   }
 
   return (
-    <div className="h-full flex flex-col max-w-[1280px] mx-auto p-4 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="h-full flex flex-col max-w-[1280px] mx-auto p-4 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24 md:pb-8">
       
       {/* Header Interactivo */}
       <div className="flex items-center gap-4 mb-8">
         <button 
             onClick={onBack}
-            className="w-12 h-12 flex items-center justify-center rounded-full bg-white border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+            className="w-12 h-12 flex flex-shrink-0 items-center justify-center rounded-full bg-white border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
         >
             <span className="material-icons text-gray-600">arrow_back</span>
         </button>
         <div>
-           <h2 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Resumen de Orden</h2>
-           <p className="text-sm text-gray-500 font-medium">Revisa los items antes de exportar</p>
+           <h2 className="text-xl md:text-3xl font-black text-gray-900 tracking-tight">
+               {isReadOnly ? `Detalles del Pedido: ORD-${orderId}` : 'Resumen de Orden'}
+           </h2>
+           <p className="text-xs md:text-sm text-gray-500 font-medium">
+               {isReadOnly ? `Realizado el ${orderDate}` : 'Revisa los items antes de exportar'}
+           </p>
         </div>
       </div>
 
@@ -141,49 +152,55 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
                         <th className="py-4 font-black text-center">Cantidad</th>
                         <th className="py-4 font-black text-right hidden md:table-cell">Precio Unit.</th>
                         <th className="py-4 pr-6 md:pr-4 font-black text-right">Total</th>
-                        <th className="py-4 w-10"></th>
+                        {!isReadOnly && <th className="py-4 w-10"></th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                     {cart.map(item => (
                         <tr key={item.variant.sku} className="group hover:bg-gray-50/50 transition-colors">
                             <td className="py-4 pl-6 md:pl-4">
-                                <div className="flex items-center gap-4">
-                                   <div className="w-12 h-12 rounded-lg bg-gray-50 border border-gray-100 p-1 flex-shrink-0">
+                                <div className="flex items-center gap-3 md:gap-4">
+                                   <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-50 border border-gray-100 p-1 flex-shrink-0">
                                       <img src={item.variant.image} className="w-full h-full object-contain mix-blend-multiply" alt="" />
                                    </div>
                                    <div>
-                                      <div className="font-bold text-gray-900 text-sm md:text-base">{item.product.title}</div>
-                                      <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 mt-1">
-                                          <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded border border-gray-200 font-mono font-bold tracking-wide">
+                                      <div className="font-bold text-gray-900 text-xs md:text-base leading-tight md:leading-normal">{item.product.title}</div>
+                                      <div className="flex flex-col md:flex-row md:items-center gap-1 mt-1">
+                                          <span className="text-[9px] md:text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded border border-gray-200 font-mono font-bold tracking-wide w-max">
                                               {item.variant.sku}
                                           </span>
-                                          <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{item.variant.option1}</span>
+                                          <span className="text-[9px] md:text-[10px] text-gray-400 font-medium uppercase tracking-wider">{item.variant.option1}</span>
                                       </div>
                                    </div>
                                 </div>
                             </td>
                             <td className="py-4 text-center">
-                                <div className="inline-flex items-center bg-white border border-gray-200 rounded-lg h-8 shadow-sm">
-                                   <button onClick={() => onUpdateQuantity(item.variant.sku, item.quantity - 1)} className="px-2.5 h-full hover:bg-gray-50 text-gray-500 font-bold">-</button>
-                                   <span className="w-8 text-center text-xs font-bold text-gray-900">{item.quantity}</span>
-                                   <button onClick={() => onUpdateQuantity(item.variant.sku, item.quantity + 1)} className="px-2.5 h-full hover:bg-gray-50 text-gray-500 font-bold">+</button>
-                                </div>
+                                {isReadOnly ? (
+                                    <span className="text-sm font-black text-gray-900">{item.quantity}</span>
+                                ) : (
+                                    <div className="inline-flex items-center bg-white border border-gray-200 rounded-lg h-8 shadow-sm">
+                                       <button onClick={() => onUpdateQuantity(item.variant.sku, item.quantity - 1)} className="px-2.5 h-full hover:bg-gray-50 text-gray-500 font-bold">-</button>
+                                       <span className="w-8 text-center text-xs font-bold text-gray-900">{item.quantity}</span>
+                                       <button onClick={() => onUpdateQuantity(item.variant.sku, item.quantity + 1)} className="px-2.5 h-full hover:bg-gray-50 text-gray-500 font-bold">+</button>
+                                    </div>
+                                )}
                             </td>
                             <td className="py-4 text-right text-gray-600 font-medium hidden md:table-cell">
                                 ${item.variant.price.toFixed(2)}
                             </td>
-                            <td className="py-4 pr-6 md:pr-4 text-right font-black text-gray-900 text-sm md:text-base">
+                            <td className="py-4 pr-6 md:pr-4 text-right font-black text-gray-900 text-xs md:text-base">
                                 ${(item.variant.price * item.quantity).toFixed(2)}
                             </td>
-                            <td className="py-4 text-right pr-4">
-                                <button 
-                                    onClick={() => onRemove(item.variant.sku)}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
-                                >
-                                    <span className="material-icons text-lg">delete</span>
-                                </button>
-                            </td>
+                            {!isReadOnly && (
+                                <td className="py-4 text-right pr-4">
+                                    <button 
+                                        onClick={() => onRemove(item.variant.sku)}
+                                        className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                                    >
+                                        <span className="material-icons text-lg">delete</span>
+                                    </button>
+                                </td>
+                            )}
                         </tr>
                     ))}
                 </tbody>
@@ -192,7 +209,7 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
 
         <div className="bg-gray-50 p-4 md:p-10 border-t border-gray-100">
             <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-8">
-                <div className="text-[10px] text-gray-400 max-w-xs leading-relaxed hidden md:block">
+                <div className="text-[10px] text-gray-400 max-w-xs leading-relaxed hidden mr-auto md:block">
                     * Los precios y disponibilidad están sujetos a cambios. Esta proforma tiene una validez de 30 días a partir de la fecha de emisión.
                 </div>
                 <div className="w-full md:w-auto space-y-3">
@@ -212,21 +229,23 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <button 
-                    onClick={handleWhatsApp}
-                    className="py-4 bg-white border border-gray-200 rounded-[20px] font-bold text-xs uppercase tracking-widest text-gray-900 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm"
-                >
-                    <span className="material-icons text-green-500">chat</span>
-                    Confirmar WhatsApp
-                </button>
+            <div className={`grid grid-cols-1 ${isReadOnly ? 'md:grid-cols-1 max-w-md ml-auto' : 'md:grid-cols-2'} gap-4`}>
+                 {!isReadOnly && (
+                     <button 
+                        onClick={handleWhatsApp}
+                        className="py-4 bg-white border border-gray-200 rounded-[20px] font-bold text-xs uppercase tracking-widest text-gray-900 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm"
+                    >
+                        <span className="material-icons text-green-500">chat</span>
+                        Confirmar WhatsApp
+                    </button>
+                 )}
                 <button 
                     onClick={handleDownloadPDF}
                     disabled={isGeneratingPdf}
                     className="py-4 bg-black text-white rounded-[20px] font-bold text-xs uppercase tracking-widest shadow-xl hover:bg-gray-800 transition-all flex items-center justify-center gap-3 disabled:opacity-70"
                 >
                     {isGeneratingPdf ? <span className="material-icons animate-spin text-lg">refresh</span> : <span className="material-icons text-lg">picture_as_pdf</span>}
-                    {isGeneratingPdf ? 'Generando...' : 'Exportar PDF Cubitt'}
+                    {isGeneratingPdf ? 'Generando...' : 'Descargar PDF'}
                 </button>
             </div>
         </div>
@@ -236,7 +255,7 @@ const ReviewOrderView: React.FC<ReviewOrderViewProps> = ({
         user={user}
         cart={cart}
         orderId={orderId}
-        date={new Date().toLocaleDateString('es-PA', { year: 'numeric', month: 'long', day: 'numeric' })}
+        date={pdfDate}
         subtotal={subtotal}
         tax={tax}
         total={total}

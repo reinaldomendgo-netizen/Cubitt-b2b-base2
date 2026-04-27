@@ -16,9 +16,9 @@ const App: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]); // Historial de pedidos
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  // const [inStockOnly, setInStockOnly] = useState(true); // Removed as per request to always hide out of stock
   const [currentView, setCurrentView] = useState<AppView>('CATALOG');
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
+  const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   
   // Estado para controlar el menú lateral en móviles
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -52,7 +52,6 @@ const App: React.FC = () => {
       const matchesCategory = selectedCategory === 'All' || p.type === selectedCategory;
       const matchesSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            p.variants.some(v => v.sku.toLowerCase().includes(searchQuery.toLowerCase()));
-      // Always filter out out of stock products
       const matchesStock = !p.isOutOfStock;
       return matchesCategory && matchesSearch && matchesStock;
     });
@@ -93,6 +92,7 @@ const App: React.FC = () => {
   const navigateTo = (view: AppView) => {
     setCurrentView(view);
     if (view !== 'PRODUCT_DETAIL') setActiveProduct(null);
+    if (view !== 'SAVED_ORDER_DETAIL') setViewingOrder(null);
     window.scrollTo(0,0);
     setIsMobileMenuOpen(false);
   };
@@ -136,7 +136,6 @@ const App: React.FC = () => {
             selectedCategory={selectedCategory} 
             setSelectedCategory={(cat) => {
               setSelectedCategory(cat);
-              // No need to navigate as we are already in CATALOG
             }} 
             isOpen={false}
             onClose={() => {}}
@@ -176,12 +175,30 @@ const App: React.FC = () => {
         />
       )}
 
+      {currentView === 'SAVED_ORDER_DETAIL' && viewingOrder && (
+        <ReviewOrderView 
+          user={user}
+          cart={viewingOrder.items} 
+          onUpdateQuantity={() => {}}
+          onRemove={() => {}}
+          onBack={() => navigateTo('ACCOUNT')}
+          onSaveOrder={() => {}}
+          onConfirm={() => {}}
+          isReadOnly={true}
+          existingOrder={viewingOrder}
+        />
+      )}
+
       {currentView === 'ACCOUNT' && (
         <AccountView 
           user={user} 
           onBack={() => navigateTo('CATALOG')} 
           orders={orders}
           onDeleteOrder={deleteOrder}
+          onViewOrder={(order) => {
+            setViewingOrder(order);
+            navigateTo('SAVED_ORDER_DETAIL');
+          }}
         />
       )}
 

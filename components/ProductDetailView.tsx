@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, ProductVariant } from '../types';
-import { COLOR_MAP } from '../constants';
 
 interface ProductDetailViewProps {
   product: Product;
@@ -123,17 +122,20 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({ product, onAddToC
                     onClick={() => setSelectedVariant(v)}
                     className={`flex flex-col items-center gap-1 md:gap-1.5 p-1.5 md:p-2 rounded-lg md:rounded-xl border-2 transition-all duration-200 ${
                       selectedVariant.sku === v.sku 
-                        ? 'border-black bg-black text-white shadow-md' 
+                        ? 'border-black bg-black/15 text-black shadow-sm' 
                         : 'border-black/5 hover:border-black/20 bg-white text-black'
                     }`}
                   >
-                    <div 
-                      className="w-6 h-6 md:w-8 md:h-8 rounded-full border border-black/10 flex-shrink-0"
-                      style={{ backgroundColor: COLOR_MAP[v.option1] || '#CCC' }}
-                    />
+                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
+                      {v.image ? (
+                        <img src={v.image} alt={v.option1} className="w-full h-full object-contain mix-blend-multiply" />
+                      ) : (
+                        <span className="material-icons text-gray-400 text-[16px]">inventory_2</span>
+                      )}
+                    </div>
                     <div className="text-center w-full min-w-0">
                       <div className="text-[7px] md:text-[8px] font-black uppercase tracking-tight leading-none mb-0.5 truncate w-full">{v.option1}</div>
-                      <div className={`text-[6px] md:text-[7px] font-mono truncate ${selectedVariant.sku === v.sku ? 'text-gray-400' : 'text-gray-300'}`}>{v.sku}</div>
+                      <div className={`text-[6px] md:text-[7px] font-mono truncate ${selectedVariant.sku === v.sku ? 'text-gray-500 font-bold' : 'text-gray-400'}`}>{v.sku}</div>
                     </div>
                   </button>
                 ))}

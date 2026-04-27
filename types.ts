@@ -53,4 +53,4 @@ export interface Order {
   status: 'Paid' | 'Pending';
 }
 
-export type AppView = 'LOGIN' | 'CATALOG' | 'PRODUCT_DETAIL' | 'REVIEW_ORDER' | 'ACCOUNT';
+export type AppView = 'LOGIN' | 'CATALOG' | 'PRODUCT_DETAIL' | 'REVIEW_ORDER' | 'ACCOUNT' | 'SAVED_ORDER_DETAIL';

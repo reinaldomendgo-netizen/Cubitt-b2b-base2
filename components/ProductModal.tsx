@@ -67,16 +67,19 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, onAdd }) 
                   <button 
                     key={v.sku}
                     onClick={() => setSelectedVariant(v)}
-                    className={`px-4 py-2 rounded-full border text-sm transition-all flex items-center gap-2 ${
+                    className={`px-3 py-1.5 rounded-full border text-sm transition-all flex items-center gap-2 ${
                       selectedVariant.sku === v.sku 
                         ? 'border-[#0071e3] bg-[#0071e3]/5 text-[#0071e3]' 
                         : 'border-[#d2d2d7] hover:border-[#86868b] text-[#424245]'
                     }`}
                   >
-                    <div 
-                      className="w-3 h-3 rounded-full shadow-inner border border-black/5" 
-                      style={{ backgroundColor: v.option1.toLowerCase().replace(' ', '') }}
-                    />
+                    <div className="w-5 h-5 rounded-md overflow-hidden flex items-center justify-center">
+                      {v.image ? (
+                        <img src={v.image} alt={v.option1} className="w-full h-full object-contain mix-blend-multiply" />
+                      ) : (
+                        <span className="material-icons text-gray-400 text-[10px]">inventory_2</span>
+                      )}
+                    </div>
                     {v.option1}
                   </button>
                 ))}
