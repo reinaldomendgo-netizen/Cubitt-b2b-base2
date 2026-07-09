@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Permitir tanto variables con prefijo VITE_ como sin él (útil para Netlify/Vercel)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+// Asegurarse de usar Vite env vars y el define de vite.config.ts
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://falta-configurar.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'falta-configurar';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('⚠️ Faltan las variables de entorno de Supabase (SUPABASE_URL y SUPABASE_ANON_KEY). La aplicación no podrá cargar datos.');

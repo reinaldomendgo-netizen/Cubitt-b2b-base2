@@ -109,7 +109,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({ product, onAddToC
                 </div>
                 <div className="text-right">
                   <span className="text-[8px] md:text-[9px] font-mono font-black text-black bg-black/5 px-3 py-1 md:px-4 md:py-1.5 rounded-full border border-black/5 uppercase">
-                    SKU: {selectedVariant.sku}
+                    SKU: {selectedVariant.sku} | MSRP: ${selectedVariant.compareAtPrice?.toFixed(2) || 'N/A'}
                   </span>
                 </div>
               </div>

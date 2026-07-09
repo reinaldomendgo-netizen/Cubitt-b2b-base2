@@ -66,8 +66,13 @@ export const processRawRows = (rows: DataRow[], priceType?: string): Product[] =
     
     const price = getPrice(row, priceType);
     
-    const comparePriceStr = getValue(row, ['Compare At Price', 'Compare Price']);
-    const comparePrice = comparePriceStr ? parseFloat(comparePriceStr.replace(/[^0-9.]/g, '')) : undefined;
+    let comparePriceStr = getValue(row, ['TD', 'Precio TD', 'TD Price']);
+    let comparePrice = comparePriceStr ? parseFloat(comparePriceStr.replace(/[^0-9.]/g, '')) : undefined;
+    
+    if (!comparePriceStr) {
+      comparePriceStr = getValue(row, ['Compare At Price', 'Compare Price', 'Variant Price', 'Price', 'Precio']);
+      comparePrice = comparePriceStr ? parseFloat(comparePriceStr.replace(/[^0-9.]/g, '')) : undefined;
+    }
     
     const inventoryStr = getValue(row, ['Inventory', 'Variant Inventory Qty', 'Stock', 'Qty']);
     const inventory = parseInt(inventoryStr, 10) || 0;
@@ -183,7 +188,10 @@ export const fetchRawProducts = async (): Promise<DataRow[]> => {
     .select('*')
     .range(0, 10000);
 
-  if (error) throw error;
+  if (error) {
+    console.error("fetchRawProducts query error:", error);
+    throw error;
+  }
   if (!products) return [];
 
   // Filtrar productos con inventario disponible

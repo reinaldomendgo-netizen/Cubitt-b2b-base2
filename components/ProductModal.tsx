@@ -109,7 +109,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, onAdd }) 
                     <span className="material-symbols-outlined text-xl">add</span>
                   </button>
                 </div>
-                <div className="text-xs text-[#86868b]">SKU: {selectedVariant.sku}</div>
+                <div className="text-xs text-[#86868b] font-medium">SKU: {selectedVariant.sku} &bull; MSRP: ${selectedVariant.compareAtPrice?.toFixed(2) || 'N/A'}</div>
               </div>
             </div>
           </div>

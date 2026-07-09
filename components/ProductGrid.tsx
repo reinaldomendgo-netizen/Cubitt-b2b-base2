@@ -85,9 +85,11 @@ const ProductGrid: React.FC<ProductGridProps> = ({ products, onSelect, selectedC
             </div>
             
             <div className="mt-auto pt-2 md:pt-3 border-t border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[8px] md:text-[10px] font-bold uppercase tracking-wide">
-                 <span className="text-gray-400 hidden sm:inline">{product.variants.length} Opts</span>
-                 <span className="text-gray-400 sm:hidden">{product.variants.length}</span>
+              <div className="flex flex-col gap-0.5 text-[8px] md:text-[10px] font-bold uppercase tracking-wide">
+                 <span className="text-gray-400">{product.variants.length} Opts</span>
+                 {product.variants[0].compareAtPrice ? (
+                   <span className="text-gray-500">MSRP: ${product.variants[0].compareAtPrice.toFixed(2)}</span>
+                 ) : null}
               </div>
               <div className="text-right">
                 <span className={`block font-black text-sm md:text-lg text-black ${product.isOutOfStock ? 'text-gray-300' : ''}`}>
