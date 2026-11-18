@@ -8,6 +8,7 @@ import ProductDetailView from './components/ProductDetailView';
 import ReviewOrderView from './components/ReviewOrderView';
 import AccountView from './components/AccountView';
 import Login from './components/Login';
+import ChristmasOverlay from './components/ChristmasOverlay';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -22,6 +23,28 @@ const App: React.FC = () => {
   
   // Estado para controlar el menú lateral en móviles
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Estado para el tema navideño (nieve y Santa con renos), persistido en localStorage
+  const [christmasEnabled, setChristmasEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('cubitt_christmas_theme');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleChristmasTheme = () => {
+    setChristmasEnabled(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cubitt_christmas_theme', String(next));
+      } catch (e) {
+        console.error('Error saving theme preference', e);
+      }
+      return next;
+    });
+  };
 
   // Cargar pedidos guardados al iniciar
   useEffect(() => {
@@ -99,14 +122,24 @@ const App: React.FC = () => {
 
   // Si no hay usuario, mostrar Login
   if (!user) {
-    return <Login onLogin={(u, loadedProducts) => {
-      setUser(u);
-      setProducts(loadedProducts); 
-    }} />;
+    return (
+      <>
+        <ChristmasOverlay enabled={christmasEnabled} />
+        <Login
+          onLogin={(u, loadedProducts) => {
+            setUser(u);
+            setProducts(loadedProducts);
+          }}
+          christmasEnabled={christmasEnabled}
+          onToggleChristmas={toggleChristmasTheme}
+        />
+      </>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-[#1D1D1F] flex flex-col font-sans transition-colors duration-200">
+    <div className={`min-h-screen text-[#1D1D1F] flex flex-col font-sans transition-colors duration-200 ${christmasEnabled ? 'bg-[#F1F5F9]' : 'bg-[#F5F5F7]'}`}>
+      <ChristmasOverlay enabled={christmasEnabled} />
       <Navbar 
         user={user} 
         cartCount={cartCount}
@@ -115,6 +148,8 @@ const App: React.FC = () => {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
+        christmasEnabled={christmasEnabled}
+        onToggleChristmas={toggleChristmasTheme}
       />
       
       <Sidebar 

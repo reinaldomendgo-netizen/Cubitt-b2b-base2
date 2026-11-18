@@ -5,9 +5,11 @@ import { fetchClientPriceType, fetchRawProducts, processRawRows } from '../servi
 
 interface LoginProps {
   onLogin: (user: User, products: Product[]) => void;
+  christmasEnabled: boolean;
+  onToggleChristmas: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, christmasEnabled, onToggleChristmas }) => {
   const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -74,14 +76,35 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] flex flex-col items-center justify-center p-4">
-      <div className="bg-white p-10 md:p-12 rounded-[40px] shadow-2xl w-full max-w-[450px] border border-black/5 animate-in fade-in zoom-in-95 duration-500">
+    <div className={`min-h-screen flex flex-col items-center justify-center p-4 relative transition-colors duration-300 ${christmasEnabled ? 'bg-[#F1F5F9]' : 'bg-[#F5F5F7]'}`}>
+      <div className="fixed top-4 right-4 z-[70]">
+        <button
+          type="button"
+          onClick={onToggleChristmas}
+          aria-pressed={christmasEnabled}
+          aria-label={christmasEnabled ? 'Apagar tema navideño' : 'Activar tema navideño'}
+          className={`h-10 px-4 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors shadow-sm border whitespace-nowrap shrink-0 ${
+            christmasEnabled
+              ? 'bg-white text-[#991B1B] border-[#FECACA] hover:bg-[#FEF2F2]'
+              : 'bg-white text-gray-600 border-black/10 hover:text-black hover:bg-gray-50'
+          }`}
+        >
+          <span className="material-icons text-[17px]">
+            {christmasEnabled ? 'ac_unit' : 'nights_stay'}
+          </span>
+          <span>{christmasEnabled ? 'Tema Navidad: Activado' : 'Tema Navidad: Apagado'}</span>
+        </button>
+      </div>
+
+      <div className="bg-white p-10 md:p-12 rounded-[40px] shadow-2xl w-full max-w-[450px] border border-black/5 animate-in fade-in zoom-in-95 duration-500 relative z-10">
         <div className="mb-10 text-center">
-          <div className="bg-black text-white w-14 h-14 rounded-[18px] flex items-center justify-center mx-auto mb-6 shadow-lg">
-            <span className="material-icons text-2xl">layers</span>
+          <div className={`text-white w-14 h-14 rounded-[18px] flex items-center justify-center mx-auto mb-6 shadow-lg transition-colors ${christmasEnabled ? 'bg-gradient-to-br from-[#991B1B] to-[#14532D]' : 'bg-black'}`}>
+            <span className="material-icons text-2xl">{christmasEnabled ? 'ac_unit' : 'layers'}</span>
           </div>
           <h1 className="text-2xl font-black uppercase tracking-tighter text-black">Cubitt B2B</h1>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-2">Portal de Ventas</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-2">
+            {christmasEnabled ? 'Portal de Ventas · Edición Navideña' : 'Portal de Ventas'}
+          </p>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-6">
